@@ -132,11 +132,11 @@ def main(folder):
         print(f"{epub.name.strip('.epub')}: {len(results)} spine files exceed threshold, worst {sf} empty={empty}/{total} ratio={ratio:.2f}")
 
 if __name__ == "__main__":
-    default = last_folder.get_last_folder()
+    default = last_folder_helper.get_last_folder()
     user_input = input(f'Input folder ({default}): ').strip()
     folder = user_input or default
     if not folder:
         folder = '.'
-    last_folder.save_last_folder(folder)
+    last_folder_helper.save_last_folder(folder)
     main(folder)
 
