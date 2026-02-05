@@ -135,6 +135,7 @@ def analyze_dom_repetition(z, candidate_path):
 
 def analyze_epub(path):
     reasons = []
+    diagnostics = []
     try:
         with ZipFile(path, 'r') as z:
             opf_path = find_opf_path(z)
@@ -164,11 +165,7 @@ def analyze_epub(path):
                 except KeyError:
                     sizes[href] = 0
             largest_file, largest_size = max(sizes.items(), key=lambda x: x[1])
-            single_file_dominates = (
-                len(spine_files) <= 2 or
-                largest_size > 300 * 1024 or
-                (total_size and largest_size / total_size > 0.7)
-            )
+            flat_spine = (len(spine_files) <= 2 or largest_size > 300 * 1024 or (total_size and largest_size / total_size > 0.7))
             toc_targets = nav_hrefs if nav_hrefs else ncx_hrefs
             distinct_target_files = set()
             for t in toc_targets:
@@ -177,21 +174,56 @@ def analyze_epub(path):
                     if PurePosixPath(s).name == PurePosixPath(base).name:
                         distinct_target_files.add(s)
                         break
-            toc_covers_few_files = (
-                toc_targets and
-                (len(distinct_target_files) <= 2 or
-                 len(distinct_target_files) / len(spine_files) < 0.15))
-            mid_index = len(spine_files) // 2
-            repetitive, total_blocks, unique_blocks = analyze_dom_repetition(z, spine_files[mid_index])
-            if not has_machine_toc and single_file_dominates:
-                reasons.append('no_toc_and_flat_spine')
-            if toc_covers_few_files and single_file_dominates:
+            toc_collapses = (toc_targets and (len(distinct_target_files) <= 2 or len(distinct_target_files) / len(spine_files) < 0.15))
+            mid = spine_files[len(spine_files) // 2]
+            dom = analyze_dom_structure(z, mid)
+            if dom['trash_ratio'] > 0.25:
+                diagnostics.append('excessive_empty_blocks')
+            if not has_machine_toc and flat_spine and not dom['has_headings']:
+                reasons.append('no_toc_and_no_segmentation_signal')
+            if toc_collapses and flat_spine:
                 reasons.append('toc_collapses_to_single_file')
-            if repetitive and single_file_dominates:
-                reasons.append('flattened_dom_single_file')
-            return reasons
+            if reasons:
+                return reasons + diagnostics
+            return []
     except Exception:
         return ['error_parsing_epub']
+
+def analyze_dom_structure(z, candidate_path):
+    try:
+        with z.open(candidate_path) as f:
+            parser = etree.HTMLParser(recover=True)
+            tree = etree.parse(f, parser)
+            body = tree.find('.//{http://www.w3.org/1999/xhtml}body') or tree.find('.//body')
+            if body is None:
+                return {'repetitive': False, 'has_headings': False, 'trash_ratio': 0.0}
+            blocks = []
+            trash = 0
+            headings = False
+            for child in body:
+                if not isinstance(child.tag, str):
+                    continue
+                tag = etree.QName(child.tag).localname.lower()
+                if tag in ('h1', 'h2', 'h3'):
+                    headings = True
+                text = ''.join(child.itertext()).strip()
+                if not text:
+                    trash += 1
+                    continue
+                cls = (child.get('class') or '').strip()
+                blocks.append(f"{tag}:{cls}")
+            total_blocks = len(blocks)
+            if total_blocks < 20:
+                return {'repetitive': False, 'has_headings': headings, 'trash_ratio': trash / max(1, trash + total_blocks)}
+            collapsed = []
+            for b in blocks:
+                if not collapsed or collapsed[-1] != b:
+                    collapsed.append(b)
+            unique = len(set(collapsed))
+            ratio = unique / len(collapsed)
+            return {'repetitive': ratio < 0.35, 'has_headings': headings, 'trash_ratio': trash / max(1, trash + total_blocks)}
+    except Exception:
+        return {'repetitive': False, 'has_headings': False, 'trash_ratio': 0.0}
 
 def main(folder):
     p = Path(folder).expanduser().resolve()
