@@ -3,7 +3,7 @@ import sys
 from zipfile import ZipFile
 from pathlib import Path, PurePosixPath
 from lxml import etree
-import last_folder
+import last_folder_helper
 
 def find_opf_path(z):
     try:
@@ -177,8 +177,6 @@ def analyze_epub(path):
             toc_collapses = (toc_targets and (len(distinct_target_files) <= 2 or len(distinct_target_files) / len(spine_files) < 0.15))
             mid = spine_files[len(spine_files) // 2]
             dom = analyze_dom_structure(z, mid)
-            if dom['trash_ratio'] > 0.25:
-                diagnostics.append('excessive_empty_blocks')
             if not has_machine_toc and flat_spine and not dom['has_headings']:
                 reasons.append('no_toc_and_no_segmentation_signal')
             if toc_collapses and flat_spine:
@@ -196,34 +194,17 @@ def analyze_dom_structure(z, candidate_path):
             tree = etree.parse(f, parser)
             body = tree.find('.//{http://www.w3.org/1999/xhtml}body') or tree.find('.//body')
             if body is None:
-                return {'repetitive': False, 'has_headings': False, 'trash_ratio': 0.0}
-            blocks = []
-            trash = 0
-            headings = False
+                return {'has_headings': False}
             for child in body:
                 if not isinstance(child.tag, str):
                     continue
                 tag = etree.QName(child.tag).localname.lower()
                 if tag in ('h1', 'h2', 'h3'):
-                    headings = True
-                text = ''.join(child.itertext()).strip()
-                if not text:
-                    trash += 1
-                    continue
-                cls = (child.get('class') or '').strip()
-                blocks.append(f"{tag}:{cls}")
-            total_blocks = len(blocks)
-            if total_blocks < 20:
-                return {'repetitive': False, 'has_headings': headings, 'trash_ratio': trash / max(1, trash + total_blocks)}
-            collapsed = []
-            for b in blocks:
-                if not collapsed or collapsed[-1] != b:
-                    collapsed.append(b)
-            unique = len(set(collapsed))
-            ratio = unique / len(collapsed)
-            return {'repetitive': ratio < 0.35, 'has_headings': headings, 'trash_ratio': trash / max(1, trash + total_blocks)}
+                    return {'has_headings': True}
+            return {'has_headings': False}
     except Exception:
-        return {'repetitive': False, 'has_headings': False, 'trash_ratio': 0.0}
+        return {'has_headings': False}
+
 
 def main(folder):
     p = Path(folder).expanduser().resolve()
@@ -237,7 +218,7 @@ def main(folder):
     for epub in epub_paths:
         reasons = analyze_epub(str(epub))
         if reasons and reasons != ['ok']:
-            print(f"{epub.name}: {', '.join(reasons)}")
+            print(f"{epub.name.strip('.epub')}: {', '.join(reasons)}")
 
 if __name__ == "__main__":
     default = last_folder.get_last_folder()

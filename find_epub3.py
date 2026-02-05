@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 from zipfile import ZipFile
 from lxml import etree
-import last_folder
+import last_folder_helper
 
 def find_opf_path(z):
     try:
@@ -65,7 +65,7 @@ def main(folder):
     for epub in epub_paths:
         classification = classify_epub(str(epub))
         if not classification.startswith("EPUB 2"):
-            print(f"{epub.name}: {classification}")
+            print(f"{epub.name.strip('.epub')}: {classification}")
 
 if __name__ == "__main__":
     default = last_folder.get_last_folder()
