@@ -4,6 +4,8 @@ from zipfile import ZipFile
 from lxml import etree
 import last_folder_helper
 
+print_classification = False
+
 def find_opf_path(z):
     try:
         with z.open('META-INF/container.xml') as f:
@@ -65,7 +67,8 @@ def main(folder):
     for epub in epub_paths:
         classification = classify_epub(str(epub))
         if not classification.startswith("EPUB 2"):
-            print(f"{epub.stem}: {classification}")
+            classification = " " + classification
+            print(f'{epub.stem}{classification if print_classification else ""}')
 
 if __name__ == "__main__":
     default = last_folder_helper.get_last_folder()
