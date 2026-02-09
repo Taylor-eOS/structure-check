@@ -1,10 +1,11 @@
-import sys
 import zipfile
 from pathlib import Path, PurePosixPath
 from lxml import etree
 import last_folder_helper
 
 size_threshold = 500.0
+print_size = False
+print_png = False
 
 def find_opf_path(z):
     try:
@@ -101,14 +102,22 @@ def main(folder):
         try:
             with zipfile.ZipFile(epub_path) as z:
                 opf_path = find_opf_path(z)
-                if opf_path:
-                    manifest, opf_dir, root, ns = parse_opf(z, opf_path)
-                    cover_zip_path, _ = find_cover_path(z, manifest, opf_dir, root, ns)
-                    if cover_zip_path:
-                        file_size_bytes = z.getinfo(cover_zip_path).file_size
-                        file_size_kb = file_size_bytes / 1024.0
-                        if file_size_kb > size_threshold:
-                            print(f"{epub_path.name[:-5]} {file_size_kb:.0f}KB {cover_zip_path}")
+                if opf_path is None:
+                    continue
+                manifest, opf_dir, root, ns = parse_opf(z, opf_path)
+                cover_zip_path, _ = find_cover_path(z, manifest, opf_dir, root, ns)
+                if cover_zip_path is None:
+                    continue
+                file_size_bytes = z.getinfo(cover_zip_path).file_size
+                file_size_kb = file_size_bytes / 1024.0
+                is_png = cover_zip_path.lower().endswith('.png')
+                if file_size_kb > size_threshold:
+                    if print_size:
+                        print(f"{epub_path.name[:-5]} size: {file_size_kb:.0f}KB")
+                    else:
+                        print(f"{epub_path.name[:-5]}")
+                elif is_png and print_png:
+                    print(f"{epub_path.name[:-5]}: is PNG")
         except Exception:
             pass
 
