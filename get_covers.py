@@ -6,6 +6,7 @@ import io
 import last_folder_helper
 
 max_dimension = 1200
+convert_to_jpg = False
 
 def find_opf_path(z):
     try:
@@ -101,6 +102,9 @@ def resize_image(img, max_dim):
         new_width = int(width * max_dim / height)
     return img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
+def get_extension_from_path(path):
+    return PurePosixPath(path).suffix.lower()
+
 def main(folder, output_folder):
     p = Path(folder).expanduser().resolve()
     if not p.is_dir():
@@ -128,13 +132,37 @@ def main(folder, output_folder):
                     continue
                 with z.open(cover_zip_path) as cover_file:
                     image_data = cover_file.read()
-                    img = Image.open(io.BytesIO(image_data))
-                    if img.mode not in ('RGB', 'L'):
-                        img = img.convert('RGB')
-                    resized_img = resize_image(img, max_dimension)
-                    output_filename = epub_path.stem + '.jpg'
-                    output_path = out_p / output_filename
-                    resized_img.save(output_path, 'JPEG', quality=95, optimize=True)
+                    if convert_to_jpg:
+                        img = Image.open(io.BytesIO(image_data))
+                        if img.mode not in ('RGB', 'L'):
+                            img = img.convert('RGB')
+                        resized_img = resize_image(img, max_dimension)
+                        output_filename = epub_path.stem + '.jpg'
+                        output_path = out_p / output_filename
+                        resized_img.save(output_path, 'JPEG', quality=95, optimize=True)
+                    else:
+                        img = Image.open(io.BytesIO(image_data))
+                        resized_img = resize_image(img, max_dimension)
+                        original_ext = get_extension_from_path(cover_zip_path)
+                        if not original_ext:
+                            original_ext = '.jpg'
+                        output_filename = epub_path.stem + original_ext
+                        output_path = out_p / output_filename
+                        save_format = None
+                        if original_ext in ['.jpg', '.jpeg']:
+                            save_format = 'JPEG'
+                            resized_img.save(output_path, save_format, quality=95, optimize=True)
+                        elif original_ext == '.png':
+                            save_format = 'PNG'
+                            resized_img.save(output_path, save_format, optimize=True)
+                        elif original_ext == '.gif':
+                            save_format = 'GIF'
+                            resized_img.save(output_path, save_format)
+                        else:
+                            save_format = 'JPEG'
+                            output_filename = epub_path.stem + '.jpg'
+                            output_path = out_p / output_filename
+                            resized_img.save(output_path, save_format, quality=95, optimize=True)
                     success_count += 1
                     print(f"Saved: {output_filename}")
         except Exception as e:
@@ -143,6 +171,7 @@ def main(folder, output_folder):
 
 if __name__ == "__main__":
     print(f"Maximum dimension: {max_dimension}px. Change in file.")
+    print(f"Convert to JPG: {convert_to_jpg}. Change in file.")
     default = last_folder_helper.get_last_folder()
     user_input = input(f'Input folder ({default}): ').strip()
     folder = user_input or default
