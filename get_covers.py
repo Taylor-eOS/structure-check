@@ -1,12 +1,18 @@
+import io
 import zipfile
 from pathlib import Path, PurePosixPath
 from lxml import etree
 from PIL import Image
-import io
 import last_folder_helper
 
 max_dimension = 1200
+size_limit = 400
 convert_to_jpg = False
+quality = 90
+min_dimension = 400
+min_quality = 70
+quality_step = 5
+dimension_step = 0.95
 
 def find_opf_path(z):
     try:
@@ -105,6 +111,89 @@ def resize_image(img, max_dim):
 def get_extension_from_path(path):
     return PurePosixPath(path).suffix.lower()
 
+def save_resized_image(img, output_path, save_format, max_dimension, target_size_kb=size_limit):
+    current_dimension = max_dimension
+    current_quality = quality
+    while current_dimension >= min_dimension and current_quality >= min_quality:
+        resized_img = resize_image(img, current_dimension)
+        buffer = io.BytesIO()
+        if save_format == 'JPEG':
+            if resized_img.mode not in ('RGB', 'L'):
+                resized_img = resized_img.convert('RGB')
+            resized_img.save(buffer, save_format, quality=current_quality, optimize=True)
+        elif save_format == 'PNG':
+            resized_img.save(buffer, save_format, optimize=True)
+        elif save_format == 'GIF':
+            resized_img.save(buffer, save_format)
+        else:
+            if resized_img.mode not in ('RGB', 'L'):
+                resized_img = resized_img.convert('RGB')
+            resized_img.save(buffer, save_format, quality=current_quality, optimize=True)
+        size_kb = len(buffer.getvalue()) / 1024
+        if size_kb <= target_size_kb:
+            with open(output_path, 'wb') as f:
+                f.write(buffer.getvalue())
+            return True
+        current_dimension = int(current_dimension * dimension_step)
+        if save_format == 'JPEG':
+            current_quality = max(min_quality, current_quality - quality_step)
+    buffer = io.BytesIO()
+    resized_img = resize_image(img, min_dimension)
+    if save_format == 'JPEG':
+        if resized_img.mode not in ('RGB', 'L'):
+            resized_img = resized_img.convert('RGB')
+        resized_img.save(buffer, save_format, quality=min_quality, optimize=True)
+    elif save_format == 'PNG':
+        resized_img.save(buffer, save_format, optimize=True)
+    elif save_format == 'GIF':
+        resized_img.save(buffer, save_format)
+    else:
+        if resized_img.mode not in ('RGB', 'L'):
+            resized_img = resized_img.convert('RGB')
+        resized_img.save(buffer, save_format, quality=min_quality, optimize=True)
+    with open(output_path, 'wb') as f:
+        f.write(buffer.getvalue())
+    return True
+
+def process_single_epub(epub_path, out_p, max_dimension, convert_to_jpg):
+    try:
+        with zipfile.ZipFile(epub_path) as z:
+            opf_path = find_opf_path(z)
+            if opf_path is None:
+                return False
+            manifest, opf_dir, root, ns = parse_opf(z, opf_path)
+            cover_zip_path, _ = find_cover_path(z, manifest, opf_dir, root, ns)
+            if cover_zip_path is None:
+                return False
+            with z.open(cover_zip_path) as cover_file:
+                image_data = cover_file.read()
+                img = Image.open(io.BytesIO(image_data))
+                if convert_to_jpg:
+                    output_filename = epub_path.stem + '.jpg'
+                    output_path = out_p / output_filename
+                    save_resized_image(img, output_path, 'JPEG', max_dimension)
+                else:
+                    original_ext = get_extension_from_path(cover_zip_path)
+                    if not original_ext:
+                        original_ext = '.jpg'
+                    output_filename = epub_path.stem + original_ext
+                    output_path = out_p / output_filename
+                    if original_ext in ['.jpg', '.jpeg']:
+                        save_format = 'JPEG'
+                    elif original_ext == '.png':
+                        save_format = 'PNG'
+                    elif original_ext == '.gif':
+                        save_format = 'GIF'
+                    else:
+                        save_format = 'JPEG'
+                        output_filename = epub_path.stem + '.jpg'
+                        output_path = out_p / output_filename
+                    save_resized_image(img, output_path, save_format, max_dimension)
+                print(f"Saved: {output_filename}")
+                return True
+    except Exception as e:
+        return False
+
 def main(folder, output_folder):
     p = Path(folder).expanduser().resolve()
     if not p.is_dir():
@@ -119,53 +208,9 @@ def main(folder, output_folder):
     success_count = 0
     fail_count = 0
     for epub_path in epub_paths:
-        try:
-            with zipfile.ZipFile(epub_path) as z:
-                opf_path = find_opf_path(z)
-                if opf_path is None:
-                    fail_count += 1
-                    continue
-                manifest, opf_dir, root, ns = parse_opf(z, opf_path)
-                cover_zip_path, _ = find_cover_path(z, manifest, opf_dir, root, ns)
-                if cover_zip_path is None:
-                    fail_count += 1
-                    continue
-                with z.open(cover_zip_path) as cover_file:
-                    image_data = cover_file.read()
-                    if convert_to_jpg:
-                        img = Image.open(io.BytesIO(image_data))
-                        if img.mode not in ('RGB', 'L'):
-                            img = img.convert('RGB')
-                        resized_img = resize_image(img, max_dimension)
-                        output_filename = epub_path.stem + '.jpg'
-                        output_path = out_p / output_filename
-                        resized_img.save(output_path, 'JPEG', quality=95, optimize=True)
-                    else:
-                        img = Image.open(io.BytesIO(image_data))
-                        resized_img = resize_image(img, max_dimension)
-                        original_ext = get_extension_from_path(cover_zip_path)
-                        if not original_ext:
-                            original_ext = '.jpg'
-                        output_filename = epub_path.stem + original_ext
-                        output_path = out_p / output_filename
-                        save_format = None
-                        if original_ext in ['.jpg', '.jpeg']:
-                            save_format = 'JPEG'
-                            resized_img.save(output_path, save_format, quality=95, optimize=True)
-                        elif original_ext == '.png':
-                            save_format = 'PNG'
-                            resized_img.save(output_path, save_format, optimize=True)
-                        elif original_ext == '.gif':
-                            save_format = 'GIF'
-                            resized_img.save(output_path, save_format)
-                        else:
-                            save_format = 'JPEG'
-                            output_filename = epub_path.stem + '.jpg'
-                            output_path = out_p / output_filename
-                            resized_img.save(output_path, save_format, quality=95, optimize=True)
-                    success_count += 1
-                    print(f"Saved: {output_filename}")
-        except Exception as e:
+        if process_single_epub(epub_path, out_p, max_dimension, convert_to_jpg):
+            success_count += 1
+        else:
             fail_count += 1
     print(f"\nProcessed {success_count + fail_count} files: {success_count} succeeded, {fail_count} failed")
 
@@ -173,7 +218,7 @@ if __name__ == "__main__":
     print(f"Maximum dimension: {max_dimension}px. Change in file.")
     print(f"Convert to JPG: {convert_to_jpg}. Change in file.")
     default = last_folder_helper.get_last_folder()
-    user_input = input(f'Input folder ({default}): ').strip()
+    user_input = input(f'Input folder ({default}): ').strip().rstrip("/")
     folder = user_input or default
     if not folder:
         folder = '.'
