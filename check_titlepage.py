@@ -6,8 +6,6 @@ import last_folder_helper
 from get_covers import find_cover_path
 from complex_scan import find_opf_path
 
-problems_only = False
-
 def resolve_href(opf_dir, href):
     return (PurePosixPath(opf_dir) / PurePosixPath(href)).as_posix()
 
@@ -322,6 +320,44 @@ def classify_titlepage(basename_lower, indicators):
         reasons.append('svg_aspect_mismatch')
     return reasons
 
+def ask_problems_only():
+    while True:
+        answer = input("Show only items with no cover indications detected? (y/n): ").strip().lower()
+        if answer in ("y", "yes"):
+            return True
+        elif answer in ("n", "no"):
+            return False
+        print("Please answer y or n.")
+
+def process_epub(epub_path, problems_only):
+    try:
+        with zipfile.ZipFile(epub_path, 'r') as z:
+            opf_path = find_opf_path(z)
+            if opf_path is None:
+                print(f'{epub_path.name[:-5][:30]:<30} SKIP: no OPF found')
+                return
+            manifest, opf_dir, root, ns = parse_opf(z, opf_path)
+            first_zip_path, first_href = find_first_content_path(z, manifest, opf_dir, root, ns)
+            if first_zip_path is None:
+                print(f'{epub_path.name[:-5][:30]:<30} SKIP: no readable spine item')
+                return
+            basename = Path(first_href).name
+            lower_basename = basename.lower()
+            book_title = root.xpath('.//dc:title/text()', namespaces={'dc': 'http://purl.org/dc/elements/1.1/'})
+            book_title = book_title[0].strip() if book_title else ""
+            cover_zip_path, _ = find_cover_path(z, manifest, opf_dir, root, ns)
+            cover_width, cover_height = None, None
+            if cover_zip_path:
+                cover_width, cover_height = get_image_dimensions(z, cover_zip_path)
+            indicators = analyze_content(z, first_zip_path, book_title, cover_width, cover_height)
+            reasons = classify_titlepage(lower_basename, indicators)
+            if problems_only and reasons:
+                return
+            reason_str = ', '.join(reasons) if reasons else 'none'
+            print(f'{epub_path.name[:-5][:30]:<30} {reason_str}')
+    except Exception as e:
+        print(f'{epub_path.name[:-5][:30]:<30} SKIP: processing error')
+
 def main(epub_folder):
     p = Path(epub_folder).expanduser().resolve()
     if not p.is_dir():
@@ -331,34 +367,9 @@ def main(epub_folder):
     if not epub_paths:
         print("No EPUB files found")
         return
+    problems_only = ask_problems_only()
     for epub_path in epub_paths:
-        try:
-            with zipfile.ZipFile(epub_path, 'r') as z:
-                opf_path = find_opf_path(z)
-                if opf_path is None:
-                    print(f'{epub_path.name.removesuffix(".epub")[:30]:<30} SKIP: no OPF found')
-                    continue
-                manifest, opf_dir, root, ns = parse_opf(z, opf_path)
-                first_zip_path, first_href = find_first_content_path(z, manifest, opf_dir, root, ns)
-                if first_zip_path is None:
-                    print(f'{epub_path.name.removesuffix(".epub")[:30]:<30} SKIP: no readable spine item')
-                    continue
-                basename = Path(first_href).name
-                lower_basename = basename.lower()
-                book_title = root.xpath('.//dc:title/text()', namespaces={'dc': 'http://purl.org/dc/elements/1.1/'})
-                book_title = book_title[0].strip() if book_title else ""
-                cover_zip_path, _ = find_cover_path(z, manifest, opf_dir, root, ns)
-                cover_width, cover_height = None, None
-                if cover_zip_path:
-                    cover_width, cover_height = get_image_dimensions(z, cover_zip_path)
-                indicators = analyze_content(z, first_zip_path, book_title, cover_width, cover_height)
-                reasons = classify_titlepage(lower_basename, indicators)
-                if problems_only and reasons:
-                    continue
-                reason_str = ', '.join(reasons) if reasons else 'none'
-                print(f'{epub_path.name.removesuffix(".epub")[:30]:<30} {reason_str}')
-        except Exception as e:
-            print(f'{epub_path.name.removesuffix(".epub")[:30]:<30} SKIP: processing error')
+        process_epub(epub_path, problems_only)
 
 if __name__ == "__main__":
     try:
