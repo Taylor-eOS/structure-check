@@ -5,7 +5,7 @@ from collections import Counter
 import last_folder_helper
 from complex_scan import find_opf_path
 
-SEARCH_STRINGS = ["oceanofpdf", "steelrat", "are belong to us", "gescannt von", "lol.to", "invisibleorder.com"]
+SEARCH_STRINGS = ["oceanofpdf", "steelrat", "are belong to us", "gescannt von", "lol.to", "invisibleorder.com", "FULL PROJECT GUTENBERG", "KeVkRaY"]
 printKeyError = False
 reportnooccurrences = False
 print_warnings = False
