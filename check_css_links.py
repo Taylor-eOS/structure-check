@@ -98,7 +98,7 @@ def analyze_epub_css_links(epub_path):
             files_missing_css = []
             for sf in spine_files:
                 sf_lower = sf.lower()
-                is_exempt = 'titlepage' in sf_lower or 'wrap' in sf_lower
+                is_exempt = any(term in sf_lower for term in ['titlepage', 'titlingpage', 'wrap', 'cover'])
                 try:
                     with z.open(sf) as fh:
                         data = fh.read()
