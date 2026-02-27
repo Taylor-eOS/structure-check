@@ -6,7 +6,6 @@ from urllib.parse import unquote
 import last_folder_helper
 from complex_scan import find_opf_path
 
-
 def parse_opf(z, opf_path):
     with z.open(opf_path) as f:
         parser = etree.XMLParser(recover=True)
@@ -39,13 +38,11 @@ def parse_opf(z, opf_path):
         opf_dir = PurePosixPath(opf_path).parent.as_posix()
         return manifest, spine, opf_dir
 
-
 def resolve_href(opf_dir, href):
     decoded = unquote(href)
     if not opf_dir:
         return PurePosixPath(decoded).as_posix()
     return (PurePosixPath(opf_dir) / PurePosixPath(decoded)).as_posix()
-
 
 def get_spine_xhtml_paths(z, manifest, spine, opf_dir):
     paths = []
@@ -61,7 +58,6 @@ def get_spine_xhtml_paths(z, manifest, spine, opf_dir):
             paths.append(href)
     return paths
 
-
 def extract_text_from_xhtml(z, zip_path):
     try:
         with z.open(zip_path) as f:
@@ -73,7 +69,6 @@ def extract_text_from_xhtml(z, zip_path):
         return ' '.join(body.itertext())
     except Exception:
         return ''
-
 
 COPYRIGHT_TEXT_SIGNALS = [
     'all rights reserved',
@@ -103,7 +98,6 @@ COPYRIGHT_FILENAME_SIGNALS = [
     'colophon',
 ]
 
-
 def score_file(zip_path, text):
     score = 0
     filename = PurePosixPath(zip_path).name.lower()
@@ -126,9 +120,7 @@ def score_file(zip_path, text):
             score += 3
     return score
 
-
 CONFIDENCE_THRESHOLD = 8
-
 
 def find_copyright_page(epub_path):
     try:
@@ -160,7 +152,6 @@ def find_copyright_page(epub_path):
     except Exception as e:
         return None, (f'error: {e}', None)
 
-
 def main(folder):
     p = Path(folder).expanduser().resolve()
     if not p.is_dir():
@@ -179,7 +170,6 @@ def main(folder):
         else:
             print(f"{name}: {detail[0]}")
 
-
 if __name__ == "__main__":
     default = last_folder_helper.get_last_folder()
     user_input = input(f'Input folder ({default}): ').strip()
@@ -188,3 +178,4 @@ if __name__ == "__main__":
         folder = '.'
     last_folder_helper.save_last_folder(folder)
     main(folder)
+
