@@ -3,6 +3,7 @@ from pathlib import Path
 import last_folder_helper
 
 print_if_none = False
+min_size = 1024
 
 def main(folder):
     p = Path(folder).expanduser().resolve()
@@ -24,7 +25,8 @@ def main(folder):
                 if has_png:
                     total_size = sum(z.getinfo(f).file_size for f in png_files)
                     size_kb = total_size / 1024
-                    print(f"{epub_path.stem[:30]:30} contains {len(png_files) if len(png_files) else 'N/A'} PNGs, {size_kb:.1f}KB total" if size_kb else "")
+                    if size_kb > min_size:
+                        print(f"{epub_path.stem[:30]:30} contains {len(png_files) if len(png_files) else 'N/A'} PNGs, {size_kb:.1f}KB total" if size_kb else "")
                 else:
                     if print_if_none: print(f"{epub_path.stem} contains no PNGs")
         except Exception as e:
