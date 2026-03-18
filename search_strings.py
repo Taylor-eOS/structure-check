@@ -80,7 +80,7 @@ def extract_clean_text(data_bytes):
         except:
             return ''
 
-def analyze_epub_strings(epub_path):
+def analyze_epub_strings(epub_path, search_terms):
     findings = Counter()
     try:
         with ZipFile(epub_path, 'r') as z:
@@ -105,7 +105,7 @@ def analyze_epub_strings(epub_path):
                     with z.open(cf) as fh:
                         data = fh.read()
                     text = extract_clean_text(data)
-                    for s in SEARCH_STRINGS:
+                    for s in search_terms:
                         findings[s] += text.count(s.lower())
                 except KeyError:
                     if printKeyError:
@@ -128,7 +128,7 @@ def main(folder):
         print("No EPUB files found")
         return
     for epub in epub_paths:
-        results = analyze_epub_strings(str(epub))
+        results = analyze_epub_strings(str(epub), search_terms)
         found = {s: c for s, c in results.items() if c > 0}
         if found:
             print(f"{epub.stem}:")
